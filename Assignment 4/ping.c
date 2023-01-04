@@ -17,12 +17,11 @@
 #include <resolv.h>
 #include <netdb.h>
 
-#define IP4_HDRLEN 20
 #define ICMP_HDRLEN 8
 
 unsigned short calculate_checksum(unsigned short *paddress, int len);
 
-#define SOURCE_IP "10.0.2.15"
+
 
 int main(int argc, char *strings[]) {
     if(argc != 2) {

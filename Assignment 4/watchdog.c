@@ -19,11 +19,13 @@
 /* Macros */
 #define WATCHDOG_PORT 3000
 
+void setBlocking(int socket, int blockMode);
+
 int main() {
 
     printf("hello partb\n");
 
-    // Create socket for receiving files. This socket acts as a TCP server socket.
+    // Create TCP server-like socket.
     int wdSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (wdSocket == -1){
         printf("Socket not created: %d", errno);
@@ -46,7 +48,7 @@ int main() {
     serverAddress.sin_addr.s_addr = INADDR_ANY;
     serverAddress.sin_port = htons(WATCHDOG_PORT);
 
-    // Bind the socket to the Receiver's given internet address.
+    // Bind the socket to the watchdog's internet address.
     int bindStatus = bind(wdSocket, (struct sockaddr *)&serverAddress, sizeof(serverAddress));
     if (bindStatus == -1){
         printf("Bind failed with error code : %d" , errno);
@@ -62,7 +64,7 @@ int main() {
         exit(0);
     }
 
-    // Create internet socket-address object, named clientAddress, for connections made with Receiver.
+    // Create internet socket-address object for client connections
     struct sockaddr_in clientAddress;
     socklen_t clientAddressLen = sizeof(clientAddress);
     memset(&clientAddress, 0, clientAddressLen);
@@ -75,9 +77,11 @@ int main() {
         exit(0);
     }
     
+    // Notify better_ping of readiness
     int wdReady = 1;
     send(clientSocket, &wdReady, 1, 0);
 
+    // Receive IP for pinging from better_ping
     char destIP[16];
     bzero(destIP, 16);
     int recvStatus = recv(clientSocket, destIP, 16, 0);
@@ -89,37 +93,56 @@ int main() {
 
     char pingStatus[5];
     int timer = 0;
-    int flag = 1;
 
-    while(flag){
+    // Endless loop
+    while(1){
+        
+        // Receive notification that ping was sent
         recv(clientSocket, pingStatus, sizeof(pingStatus), 0);
+        
+        // Start timer, chack every second if a pong was received
         if(strcmp("ping", pingStatus) == 0) {
             printf("Started timer\n");
-            fcntl(clientSocket, F_SETFL, O_NONBLOCK);
+            setBlocking(clientSocket, 0);
             while (timer < 10) {
                 timer++;
                 recv(clientSocket, pingStatus, sizeof(pingStatus), 0);
+                
+                // If pong is received, reset timer and break
                 if(strcmp("pong", pingStatus) == 0){
                     timer = 0;
-                    fcntl(clientSocket, F_SETFL, O_NONBLOCK);
+                    setBlocking(clientSocket, 1);
                     break;
                 }
+                // Count 1 second and redo
                 sleep(1);
             }
             printf("Exit timer\n");
             if(timer == 10){
                 printf("Timeout");
-                flag = 0;
+                break;
             }
         }
     }
     printf("Server %s cannot be reached.\n", destIP);
 
+    // Send timeout signal to better_ping
     char exitCode[8] = "Timeout";
-    fcntl(clientSocket, F_SETFL, O_NONBLOCK);
+    setBlocking(clientSocket, 1);
     send(clientSocket, exitCode, sizeof(exitCode), 0);
-
+    
+    // Close sockets and exit program
     close(clientSocket);
     close(wdSocket);
     return 0;
+}
+
+void setBlocking(int socket, int blockMode){
+    int flags = fcntl(socket, F_GETFL, 0);
+    if(blockMode) {
+        flags &= ~O_NONBLOCK;
+    } else {
+        flags |= O_NONBLOCK;
+    }
+    fcntl(socket, F_SETFL, flags);
 }

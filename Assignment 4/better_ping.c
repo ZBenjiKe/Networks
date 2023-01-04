@@ -1,11 +1,5 @@
 /* Program to send ICMP Echo Requests using Raw Sockets, using a Watchdog Timer. */
 
-/*
-The program will send an ICMP Echo Requests to the IP inserted as an argument in the
-terminal execution, then run a watchdog timer of 10 seconds. If the response is not recieved
-within 10 seconds, the program will end.
-*/
-
 
 /* Included Libraries */
 #include <arpa/inet.h>
@@ -24,32 +18,27 @@ within 10 seconds, the program will end.
 #include <resolv.h>
 #include <netdb.h>
 
-
-// run 2 programs using fork + exec
-// command: make clean && make all && ./partb
-
-#define IP4_HDRLEN 20
 #define ICMP_HDRLEN 8
-#define SOURCE_IP "10.0.2.15"
 #define WATCHDOG_IP "127.0.0.1"
 #define WATCHDOG_PORT 3000
 
 unsigned short calculate_checksum(unsigned short *paddress, int len);
 
 int main(int argc, char *strings[]) {
+    
+    // Verify the program was run correctly
     if(argc != 2) {
         printf("usage: %s <addr>\n", strings[0]);
         exit(0);
     }
-
-/*--------------------------------------------------------------------*/
-/*---   Creat TCP socket and struct Watchdog's internet address    ---*/
-/*--------------------------------------------------------------------*/ 
+    
+    // Create TCP socket
     int tcpSocket = socket(AF_INET, SOCK_STREAM, 0);
     if (tcpSocket == -1){
         printf("Socket not created: %d\n", errno);
     }
 
+    // Struct Watchdog's internet address
     struct sockaddr_in wdAddress;
     memset(&wdAddress, 0, sizeof(wdAddress));
     wdAddress.sin_family = AF_INET;
@@ -59,9 +48,7 @@ int main(int argc, char *strings[]) {
         ip_addr == -1 ? printf("inet_pton() failed %d: ", errno) : printf("inet_pton() src invalid");
     }
 
-/*--------------------------------------------------------------------*/
-/*---      Creat Raw Socket for sending ICMP Echo Requests         ---*/
-/*--------------------------------------------------------------------*/   
+    // Struct the internet address of the destination IP
     struct hostent *hname;
     hname = gethostbyname(strings[1]);
 
@@ -70,13 +57,15 @@ int main(int argc, char *strings[]) {
     destAddr.sin_family = AF_INET;
     destAddr.sin_port = 0;
     destAddr.sin_addr.s_addr = *(long*)hname->h_addr;
-        
+
+    // Create Raw Socket for sending ICMP Echo Requests        
     int rawSocket = socket(AF_INET, SOCK_RAW, IPPROTO_ICMP);
     if(rawSocket < 0){
         perror("socket");
         return -1;
     }
 
+    // Set ttl for all packets sent through Raw Socket        
     int ttl = 255;
     int sockopt = setsockopt(rawSocket, SOL_IP, IP_TTL, &ttl, sizeof(ttl));
     if (sockopt != 0){
@@ -103,9 +92,7 @@ int main(int argc, char *strings[]) {
 /*---  Run main process (with 1 second delay for good connection)  ---*/
 /*--------------------------------------------------------------------*/          
 
-/*--------------------------------------------------------------------*/
-/*---             Create TCP connection with Watchdog              ---*/
-/*--------------------------------------------------------------------*/   
+        // Establish TCP connection with Watchdog   
         int connectionStatus = connect(tcpSocket, (struct sockaddr *)&wdAddress, sizeof(wdAddress));
         if (connectionStatus == -1){
             printf("Socket not connected: %d", errno);
@@ -113,18 +100,16 @@ int main(int argc, char *strings[]) {
             printf("connected to Watchdog\n");
         }
         
-        /*--- Receive "ready signal" from watchdog ---*/
+        // Receive "ready signal" from watchdog
         int wdReady = 0;
         while(!wdReady) {
             recv(tcpSocket, &wdReady, 1, 0);
         }
 
-        /*--- Send Watchdog the destIP address ---*/
-        send(tcpSocket, strings[1], sizeof(strings[1]), 0);
+        // Send Watchdog the destIP address
+        send(tcpSocket, strings[1], 16, 0);
 
-/*--------------------------------------------------------------------*/
-/*---              Variables for main while-loop                   ---*/
-/*--------------------------------------------------------------------*/   
+        // Variables for main while-loop 
         char data[IP_MAXPACKET] = "Ping.\n";
         int datalen = strlen(data) + 1;
         char packet[IP_MAXPACKET];
@@ -134,14 +119,12 @@ int main(int argc, char *strings[]) {
 
         char pingStatus[5];
 
-        int flag = 1;
-
 /*--------------------------------------------------------------------*/
 /*---                       Main while-loop                        ---*/
 /*--------------------------------------------------------------------*/       
-        while(flag) {
+        while(1) {
 
-            /*--- Assemble ping packet ---*/
+            // Assemble ping packet
             struct icmp icmphdr;
             icmphdr.icmp_type = ICMP_ECHO;
             icmphdr.icmp_code = 0;
@@ -155,18 +138,20 @@ int main(int argc, char *strings[]) {
             icmphdr.icmp_cksum = calculate_checksum((unsigned short *)(packet), ICMP_HDRLEN + datalen);
             memcpy((packet), &icmphdr, ICMP_HDRLEN);
 
-            /*--- Send ping ---*/
+            // Send ping
             gettimeofday(&start, 0);
             sendto(rawSocket, packet, ICMP_HDRLEN + datalen, 0, (struct sockaddr *)&destAddr, sizeof(destAddr));
 
-            /*--- Notify Watchdog that ping has been sent ---*/
+            // Notify Watchdog that ping has been sent
             strcpy(pingStatus, "ping");
             send(tcpSocket, pingStatus, sizeof(pingStatus), 0);
 
             printf("Waiting for ICMP Echo Response...\n");
-
             bzero(packet, IP_MAXPACKET);
+
+            // Fork receive - timeout from watchdog or pong from destIP 
             int replyPID = fork();
+            
             /*--- Watchdog timeout ---*/
             if(replyPID == 0){
                 recv(tcpSocket, &packet, sizeof(packet), 0);
@@ -184,18 +169,17 @@ int main(int argc, char *strings[]) {
                 if (bytesReceived > 0) {
                     gettimeofday(&end, 0);
 
-                    /*--- Notify Watchdog that ping was received ---*/
+                    // Notify Watchdog that ping was received
                     strcpy(pingStatus, "pong");
                     send(tcpSocket, pingStatus, sizeof(pingStatus), 0);
-                    /*--- Print out ping data ---*/
+                    
+                    // Print out ping data
                     float RTT = (end.tv_sec - start.tv_sec) * 1000.0f + (end.tv_usec - start.tv_usec) / 1000.0f;
                     printf("Ping returned: %d bytes from IP = %s, Seq = %d, RTT = %.3f milliseconds\n", bytesReceived, strings[1], packetSeq, RTT);
                     sleep(1);
                 }
             }
         }
-        //wait(&status); // waiting for child to finish before exiting
-        //printf("child exit status is: %d", status);
         close(tcpSocket);
         close(rawSocket);
     }
