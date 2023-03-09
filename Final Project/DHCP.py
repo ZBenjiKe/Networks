@@ -4,6 +4,7 @@ import random
 from scapy.layers.dhcp import DHCP, BOOTP
 from scapy.layers.inet import IP, UDP
 from scapy.layers.l2 import Ether
+from scapy.sendrecv import sendp, sniff
 
 global ip_dhcp, ip_end, ip_list
 ip_dhcp = "10.0.0.16"
@@ -50,9 +51,12 @@ def ack(packet):
                    DHCP(options=[("message-type", "ack"),
                                  ("subnet_mask", "255.255.255.0"),
                                  ("router", "10.0.0.18"),
+                                 ("name_server", "10.0.0.18"),
                                  ("lease_time", 3600), "end"]) #ACK packet created
         time.sleep(0.2)
         sendp(dhcp_ack, iface="wlp3s0") #Send ACK
         print("ACK sent!")
+
+
 if __name__ == '__main__':
         sniff(filter="udp and port 68", prn=offer, iface="wlp3s0")

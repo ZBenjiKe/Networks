@@ -6,6 +6,16 @@ from scapy.layers.dns import DNSQR, DNS
 from scapy.layers.inet import IP, UDP
 from scapy.layers.l2 import Ether
 
+
+dhcp_ip = None
+dhcp_port = 67
+dns_ip = None
+dns_port = 53
+app_ip = None
+app_port = 30577
+app_domain = "www.dashserver.com"
+
+
 '''''''''''''''''''''''''''''''''
          DHCP - Functions
 '''''''''''''''''''''''''''''''''
@@ -20,7 +30,7 @@ def discover():
     sniff(filter="udp and port 67", prn=request, count=1, iface="wlp3s0")
 
 def request(packet):
-    global client_ip, dns_ip
+#    global client_ip, dns_ip
     client_ip = packet[BOOTP].yiaddr
     dns_ip = packet[DHCP].options[3][1]
     if client_ip == "0.0.0.0":
@@ -38,6 +48,12 @@ def request(packet):
     print("Request sent!")
     sniff(filter="udp and port 67", count=1, iface="wlp3s0")
 
+discover()
+
+'''
+if client_ip != "0.0.0.0":
+    dns()
+'''
 
 '''''''''''''''''''''''''''''''''
     Connect with UDP to DHCP
@@ -46,14 +62,7 @@ def request(packet):
 Tuvia
 clientSocket = socket(AF_INET, SOCK_DGRAM)
 #IP gain as ^client_ip^
-discover()
-if client_ip != "0.0.0.0":
-    dns()
 '''
-
-'''''''''''''''''''''''''''''''''
-         DNS - Functions
-'''''''''''''''''''''''''''''''''
 
 
 '''''''''''''''''''''''''''''''''
@@ -66,23 +75,23 @@ clientSocket = socket(AF_INET, SOCK_DGRAM)
 serverName = 'localhost'
 serverPort = 14000
 
-dns_address = ('localhost', 53)
+dns_address = (dns_ip, dns_port)
 
-request = DNS(rd=1, qd=DNSQR(qname='www.dashserver.com'))
+request = DNS(rd=1, qd=DNSQR(qname=app_domain))
 clientSocket.sendto(request.encode(), dns_address)
 data, address = clientSocket.recvfrom(2048)
 response = DNS(data)
 
 print(response.summary()) #Remove for handing in
 
-dash_address = None
-
-for answer in response[DNS].an:
+for answer in response[DNS].an:  #Check what .an is
     if answer.type == 1: # Type "A"
-        dash_address = answer.rdata
+        app_ip = answer.rdata
         break
 
 clientSocket.close()
+print("Finished. DASH IP is: ", app_ip)
+
 
 '''''''''''''''''''''''''''''''''
           TCP - DASH
@@ -91,7 +100,7 @@ clientSocket.close()
 '''
 Make sure process port is 20908
 '''
-
+'''
 #SERVER_ADDRESS = ('localhost', 13000)
 clientSocket = socket(AF_INET, SOCK_STREAM)
 
@@ -110,3 +119,4 @@ clientSocket.send(chosenQuality.encode())
 while():
     frame = clientSocket.recv(4096).decode()
 clientSocket.close()
+'''
