@@ -3,6 +3,7 @@ from scapy.layers.dns import DNS, DNSQR, DNSRR
 from scapy.layers.inet import IP, UDP
 from socket import *
 
+
 serverPort = 53
 SERVER_ADDRESS = ('', serverPort)
 serverSocket = socket(AF_INET, SOCK_DGRAM)
@@ -14,10 +15,10 @@ while True:
     print("Got request from client.")
 
     # Define the DNS query we want to respond to
-    query = DNS(rd=1, qd=DNSQR(qname="dashserver.com"))
+    query = DNS(rd=1, qd=DNSQR(qname="www.dashserver.com"))
 
     # Define the fake DNS response we want to send
-    response = DNSRR(rrname="dashserver.com", type="A", ttl=60, rdata="127.0.0.1")
+    response = DNSRR(rrname="www.dashserver.com", type="A", ttl=60, rdata="127.0.0.1")
 
     # Construct the IP header
     ip = IP(dst=clientAddress[0], src="127.0.0.1")

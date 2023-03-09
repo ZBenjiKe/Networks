@@ -2,6 +2,7 @@ from socket import *
 from scapy.all import*
 import time
 from scapy.layers.dhcp import DHCP, BOOTP
+from scapy.layers.dns import DNSQR, DNS
 from scapy.layers.inet import IP, UDP
 from scapy.layers.l2 import Ether
 
@@ -17,7 +18,6 @@ def discover():
     sendp(first)
     print("Discover sent!")
     sniff(filter="udp and port 67", prn=request, count=1, iface="wlp3s0")
-
 
 def request(packet):
     global client_ip
@@ -37,34 +37,57 @@ def request(packet):
     print("Request sent!")
     sniff(filter="udp and port 67", count=1, iface="wlp3s0")
 
+
+'''''''''''''''''''''''''''''''''
+    Connect with UDP to DHCP
+'''''''''''''''''''''''''''''''''
+'''
+Tuvia
+clientSocket = socket(AF_INET, SOCK_DGRAM)
 #IP gain as ^client_ip^
 discover()
+'''
+
 '''''''''''''''''''''''''''''''''
-        UDP - DHCP, DNS
+         DNS - Functions
 '''''''''''''''''''''''''''''''''
 
-serverName = 'localhost'
-serverPort = 12000
+
+'''''''''''''''''''''''''''''''''
+    Connect with UDP to DNS
+'''''''''''''''''''''''''''''''''
+
+# DNS query to find IP for DASH server
 clientSocket = socket(AF_INET, SOCK_DGRAM)
 
-'''
-DHCP config
-Make sure dns resolver is dns server from project
-Make sure process port is 20908
-'''
+serverName = 'localhost'
+serverPort = 14000
 
-'''
-# DNS query to find IP for DASH server
-ans = sr1(IP(dst="8.8.8.8")/UDP(sport=RandShort(), dport=53)/DNS(rd=1,qd=DNSQR(qname="dashserver.com",qtype="A")))
-ans.an.rdata
-'''
+dns_address = ('localhost', 53)
+
+request = DNS(rd=1, qd=DNSQR(qname='www.dashserver.com'))
+clientSocket.sendto(request.encode(), dns_address)
+data, address = clientSocket.recvfrom(2048)
+response = DNS(data)
+
+print(response.summary()) #Remove for handing in
+
+dash_address = None
+
+for answer in response[DNS].an:
+    if answer.type == 1: # Type "A"
+        dash_address = answer.rdata
+        break
 
 clientSocket.close()
-
 
 '''''''''''''''''''''''''''''''''
           TCP - DASH
 '''''''''''''''''''''''''''''''''
+
+'''
+Make sure process port is 20908
+'''
 
 #SERVER_ADDRESS = ('localhost', 13000)
 clientSocket = socket(AF_INET, SOCK_STREAM)
