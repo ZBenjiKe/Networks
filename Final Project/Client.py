@@ -20,13 +20,14 @@ def discover():
     sniff(filter="udp and port 67", prn=request, count=1, iface="wlp3s0")
 
 def request(packet):
-    global client_ip
+    global client_ip, dns_ip
     client_ip = packet[BOOTP].yiaddr
+    dns_ip = packet[DHCP].options[3][1]
     if client_ip == "0.0.0.0":
         print("IP address didn't assigned")
         return
     print ("Client IP:", client_ip)
-
+    print("DNS:", dns_ip)
     request = Ether(dst="ff:ff:ff:ff:ff:ff") / \
                     IP(src="0.0.0.0", dst="255.255.255.255") / \
                     UDP(sport=68, dport=67) / \
@@ -46,6 +47,8 @@ Tuvia
 clientSocket = socket(AF_INET, SOCK_DGRAM)
 #IP gain as ^client_ip^
 discover()
+if client_ip != "0.0.0.0":
+    dns()
 '''
 
 '''''''''''''''''''''''''''''''''
