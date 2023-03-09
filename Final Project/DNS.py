@@ -4,38 +4,27 @@ from scapy.layers.inet import IP, UDP
 from socket import *
 import time
 
-app_domain = "www.dashserver.com"
+app_domain = 'www.dashserver.com'
+dns_ip = '127.0.0.1'
 
 def DNS_Reply():
     dnsQuery, clientAddress = dns_socket.recvfrom(2048)
     print("Got request from client.")
-    print(dnsQuery.show())
 
     # Define the DNS query we want to respond to
     query = DNS(rd=1, qd=DNSQR(qname=app_domain))
 
     # Define the fake DNS response we want to send
     response = DNSRR(rrname=app_domain, type="A", ttl=60, rdata="127.0.0.1")
+    
+    dns_pack = DNS(id=query.id, ancount=1, qr=1, qd=query.qd, an=response)
 
-    # Construct the IP header
-    ip = IP(dst=clientAddress[0], src="127.0.0.1")
+    dns_socket.sendto(bytes(dns_pack), clientAddress)
 
-    # Construct the UDP header
-    udp = UDP(sport=53, dport=clientAddress[1])
-
-    # Construct the DNS packet by concatenating the query and response
-    dns_packet = query / response
-
-    # Send the fake DNS response
-    response = ip / udp / dns_packet
-
-    print(str(response))
-
-    dns_socket.sendto(bytes(response), clientAddress)
+    print(str(dns_pack))
     
     print("Sent response.")
     time.sleep(1)
-    dns_socket.close()
 
 if __name__ == '__main__':
     dns_port = 53
@@ -43,4 +32,6 @@ if __name__ == '__main__':
     dns_socket = socket(AF_INET, SOCK_DGRAM)
     dns_socket.bind(SERVER_ADDRESS)
     print("The DNS server is ready to receive requests.")
-    DNS_Reply()
+    while True:
+        DNS_Reply()
+    dns_socket.close()

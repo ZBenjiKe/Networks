@@ -31,12 +31,12 @@ def offer(packet):
                  DHCP(options=[("message-type", "offer"),
                     ("subnet_mask", "255.255.255.0"),
                     ("router", "10.0.0.10"),
-                    ("name_server", "10.0.0.18"),
+                    ("name_server", "127.0.0.1"),
                     ("lease_time", 3600), "end"]) ## NEED TO READ ABOUT BOOTP
         time.sleep(0.2)
-        sendp(offer, iface="wlp3s0")
+        sendp(offer)
         print("Offer sent!")
-        sniff(filter="udp and port 68", prn=ack, count=1, iface="wlp3s0")
+        sniff(filter="udp and port 68", prn=ack, count=1)
 
 def ack(packet):
     global ip_end, ip_list
@@ -51,12 +51,15 @@ def ack(packet):
                    DHCP(options=[("message-type", "ack"),
                                  ("subnet_mask", "255.255.255.0"),
                                  ("router", "10.0.0.18"),
-                                 ("name_server", "10.0.0.18"),
+                                 ("name_server", "127.0.0.1"),
                                  ("lease_time", 3600), "end"]) #ACK packet created
         time.sleep(0.2)
-        sendp(dhcp_ack, iface="wlp3s0") #Send ACK
+        sendp(dhcp_ack) #Send ACK
         print("ACK sent!")
 
+def main():
+    print("DHCP server is online.")
+    sniff(filter="udp and port 68", prn=offer)
 
 if __name__ == '__main__':
-        sniff(filter="udp and port 68", prn=offer, iface="wlp3s0")
+    main()
