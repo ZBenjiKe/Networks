@@ -1,13 +1,14 @@
 from scapy.all import*
 import time
+import random
 from scapy.layers.dhcp import DHCP, BOOTP
 from scapy.layers.inet import IP, UDP
 from scapy.layers.l2 import Ether
 
 global ip_dhcp, ip_end, ip_list
 ip_dhcp = "10.0.0.16"
-ip_end = 16
-ip_list = ["10.0.0.16", "10.0.0.18", "10.0.0.10"]
+ip_end = 1 #Starting IP
+ip_list = ["10.0.0.16", "127.0.0.1", "10.0.0.10"]
 
 def offer(packet):
     global ip_end, ip_list
@@ -30,8 +31,8 @@ def offer(packet):
                     ("subnet_mask", "255.255.255.0"),
                     ("router", "10.0.0.10"),
                     ("name_server", "10.0.0.18"),
-                    ("lease_time", 3600), "end"])
-        time.sleep(1)
+                    ("lease_time", 3600), "end"]) ## NEED TO READ ABOUT BOOTP
+        time.sleep(0.2)
         sendp(offer, iface="wlp3s0")
         print("Offer sent!")
         sniff(filter="udp and port 68", prn=ack, count=1, iface="wlp3s0")
@@ -50,8 +51,8 @@ def ack(packet):
                                  ("subnet_mask", "255.255.255.0"),
                                  ("router", "10.0.0.18"),
                                  ("lease_time", 3600), "end"]) #ACK packet created
-        time.sleep(1)
+        time.sleep(0.2)
         sendp(dhcp_ack, iface="wlp3s0") #Send ACK
         print("ACK sent!")
 if __name__ == '__main__':
-    sniff(filter="udp and port 68", prn=offer, iface="wlp3s0")
+        sniff(filter="udp and port 68", prn=offer, iface="wlp3s0")
