@@ -1,5 +1,8 @@
 import requests
 from socket import *
+import os
+import time
+
 
 img_urls_files = [
     '''
@@ -7,18 +10,15 @@ img_urls_files = [
     '''
 ]
 
-img_urls _website = [
+img_urls_website = [
+'''
+option to download project images from github repo
+'''
 'https://images.unsplash.com/photo-1538991383142-36c4edeaffde',
-'https://images.unsplash.com/photo-1430990480609-2bf7c02a6b1a',
-'https://images.unsplash.com/photo-1506038634487-60a69ae4b7b1',
-'https://images.unsplash.com/photo-1509514026798-53d40bf1aa09',
-'https://images.unsplash.com/photo-1533228876829-65c94e7b5025',
-'https://images.unsplash.com/photo-1453060590797-2d5f419b54cb',
-'https://images.unsplash.com/photo-1496692052106-d37cb66ab80c',
-'https://images.unsplash.com/photo-1483921020237-2ff51e8e4b22'
+'https://images.unsplash.com/photo-1430990480609-2bf7c02a6b1a'
 ]
 
-
+'''
 def downloadImage(img_url):
     img_bytes = requests.get(img_url).content
     img_name = img_url.split('/')[3]
@@ -27,40 +27,65 @@ def downloadImage(img_url):
     img_file.write(img_bytes)
     print(f'{img_name} was downloaded')
 
+'''
 
-def timer():
-    start = time.perf_counter()
-    downloadImage(img_url)
-    finish = time.perf_counter()
-
-
-def main():
-
+def sendImagesOverTCP():
     SERVER_ADDRESS = ('', 30577)
     # serverSocket = socket.socket()
     serverSocket = socket(AF_INET, SOCK_STREAM)
+    serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     serverSocket.bind(SERVER_ADDRESS)
     serverSocket.listen(1)
-    print("The server is ready to receive.")
+    print("The DASH server is ready for connections.")
 
-    while True:
-        connectionSocket, addrClient = serverSocket.accept()
-        print("Recieved connection from client ",addrClient)
-        message = "Hello!\nThere are 25 video frames available for this video. Please select the video quality you would like:\n"\
-                  "\t720 ......... 1\n" \
-                  "\t480 ......... 2\n" \
-                  "\t360 ......... 3\n"
-        connectionSocket.send(bytes(message.encode()))
-        initQuality = connectionSocket.recv(4096).decode()
-        quality = initQuality
-        frameCount = 0
-        filePaths = []
-        with open(filePaths[chosenQuality]):
-            while(frameCount <= 25):
-                with open(path)
+    clientSocket, addrClient = serverSocket.accept()
+    print("Recieved connection from client ",addrClient)
 
-    connectionSocket.close()
+    message = "Hello!\nThere are 25 video frames available for this video.\nPlease select the video quality you would like:\n720, 480 or 360\n"
+    clientSocket.send(bytes(message.encode()))
+    quality = clientSocket.recv(1024).decode()
 
+    img_dir = os.getcwd()+"/Pictures"
+    frameCount = 1
+
+    while(frameCount <= 25):
+        start = time.perf_counter()
+        imageFile = img_dir+f'/{quality}'+f"/{frameCount}.png"
+        with open(imageFile, "rb") as imageFile:
+            imageStr = imageFile.read()
+        clientSocket.sendall(imageStr)
+        clientSocket.send("Finished".encode())
+        frameCount += 1
+        ack = clientSocket.recv(1024)
+        finish = time.perf_counter()
+        new_quality = verifyQuality(start, finish, quality)
+        quality = new_quality
+    print("Finished sending frames to client.")
+    
+    time.sleep(3)
+    serverSocket.close()
+
+
+def verifyQuality(start, finish, quality):
+    if (finish - start) > 1 :
+        if quality == "720":
+            quality = "480"
+            print("quality changed from 720 to 480")
+        elif quality == "480":
+            quality = "360"
+            print("quality changed from 480 to 360")
+    elif (finish - start) < 0.5 :
+        if quality == "360":
+            quality = "480"
+            print("quality changed from 360 to 480")
+        elif quality == "480":
+            quality = "720"
+            print("quality changed from 480 to 720")
+    return quality
+
+
+def main():
+    sendImagesOverTCP()
 
 if __name__ == '__main__':
     main()

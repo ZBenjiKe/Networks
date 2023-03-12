@@ -10,9 +10,9 @@ from scapy.layers.l2 import Ether
 client_ip = '0.0.0.0'
 dhcp_ip = '0.0.0.0'
 dhcp_port = 67
-dns_ip = '0.0.0.0'
+dns_ip = '127.0.0.1'
 dns_port = 53
-app_ip = '0.0.0.0'
+app_ip = '127.0.0.1'
 app_port = 30577
 app_domain = "www.dashserver.com"
 
@@ -47,7 +47,7 @@ def request(packet):
     time.sleep(1)
     sendp(request)
     print("Request sent!")
-    sniff(filter="udp and port 67", count=1)
+ #   sniff(filter="udp and port 67", count=1)
 
 
 '''''''''''''''''''''''''''''''''
@@ -87,10 +87,10 @@ def getDashIP():
           TCP - DASH
 '''''''''''''''''''''''''''''''''
 
-def streamFromDash():
+def streamFromDashTCP():
 
     DASH_ADDRESS = (app_ip, app_port)
-    clientSocket = socket(AF_INET, SOCK_STREAM)
+    clientSocket = socket.socket(AF_INET, SOCK_STREAM)
     clientSocket.connect(DASH_ADDRESS)
 
     '''
@@ -100,29 +100,39 @@ def streamFromDash():
     # Choose picture quality to receive
     options = clientSocket.recv(4096).decode()
     chosenQuality = input(options)
-    while chosenQuality < 1 or chosenQuality > 5:
+    while chosenQuality != "720" and chosenQuality != "480" and chosenQuality != "360":
         chosenQuality = input('Please enter a valid choice')
     clientSocket.send(chosenQuality.encode())
     
     # Receive video files
-    while():
-        frame = clientSocket.recv(4096).decode()
+    time.sleep(1)
+
+    frameCount = 1
+
+    while(frameCount <= 25):
+        data = b''
+        while b"Finished" not in data:
+            data += clientSocket.recv(1024)
+        data = data[:-8]
+
+        image_copy = open(f'Copies/{frameCount}.png', "wb")
+        image_copy.write(data)
+        image_copy.close()
+        frameCount += 1
+        clientSocket.send("ACK".encode())
+
+    print("Finished receiving video frames.")
+
     clientSocket.close()
 
-
-
-
-
-
-
-
-
-'''
 
 def main():
     discover()
     if dns_ip != "0.0.0.0":
         getDashIP()
+    if app_ip != "0.0.0.0":
+        streamFromDashTCP()
+    
 
 
 if __name__ == '__main__':
