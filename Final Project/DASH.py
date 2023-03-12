@@ -41,7 +41,7 @@ def sendImagesOverTCP():
     clientSocket, addrClient = serverSocket.accept()
     print("Recieved connection from client ",addrClient)
 
-    message = "Hello!\nThere are 25 video frames available for this video.\nPlease select the video quality you would like:\n720, 480 or 360\n"
+    message = "Hello from DASH!\nThere are 25 video frames available for this video.\nPlease select the video quality you would like:\n720, 480 or 360\n"
     clientSocket.send(bytes(message.encode()))
     quality = clientSocket.recv(1024).decode()
 

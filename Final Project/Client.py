@@ -7,16 +7,6 @@ from scapy.layers.inet import IP, UDP
 from scapy.layers.l2 import Ether
 
 
-client_ip = '0.0.0.0'
-dhcp_ip = '0.0.0.0'
-dhcp_port = 67
-dns_ip = '127.0.0.1'
-dns_port = 53
-app_ip = '127.0.0.1'
-app_port = 30577
-app_domain = "www.dashserver.com"
-
-
 '''''''''''''''''''''''''''''''''
     Connect with UDP to DHCP
 '''''''''''''''''''''''''''''''''
@@ -57,31 +47,25 @@ def request(packet):
 def getDashIP():
 
     clientSocket = socket.socket(AF_INET, SOCK_DGRAM)
-
     serverName = 'localhost'
     serverPort = 14000
-
     DNS_ADDRESS = (dns_ip, dns_port)
 
     request = DNS(rd=1, qd=DNSQR(qname=app_domain))
-
     clientSocket.sendto(bytes(request), DNS_ADDRESS)
     print("DNS request sent.")
     time.sleep(2)
 
     data, address = clientSocket.recvfrom(2048)
     print("DNS response received.")
-    print("Data: ", data)
 
     response = DNS(data)
-
-    print(response) #Remove for handing in
-
-    app_ip = response.an.rdata
-
+    app_ip = str(response.an.rdata)
     print("DASH server IP is:", app_ip)
 
     clientSocket.close()
+
+    return app_ip
 
 '''''''''''''''''''''''''''''''''
           TCP - DASH
@@ -127,9 +111,17 @@ def streamFromDashTCP():
 
 
 def main():
+    dhcp_ip = '127.0.0.1'
+    dhcp_port = 67
+    dns_ip = '127.0.0.1'
+    dns_port = 53
+    app_ip = '0.0.0.0'
+    app_port = 30577
+    app_domain = "www.dashserver.com"
+
     discover()
     if dns_ip != "0.0.0.0":
-        getDashIP()
+        app_ip = getDashIP()
     if app_ip != "0.0.0.0":
         streamFromDashTCP()
     

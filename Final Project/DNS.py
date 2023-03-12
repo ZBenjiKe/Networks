@@ -11,17 +11,14 @@ def DNS_Reply():
     dnsQuery, clientAddress = dns_socket.recvfrom(2048)
     print("Got request from client.")
 
-    # Define the DNS query we want to respond to
+    # DNS query to respond to
     query = DNS(rd=1, qd=DNSQR(qname=app_domain))
 
-    # Define the fake DNS response we want to send
+    # DNS response
     response = DNSRR(rrname=app_domain, type="A", ttl=60, rdata="127.0.0.1")
-    
     dns_pack = DNS(id=query.id, ancount=1, qr=1, qd=query.qd, an=response)
 
     dns_socket.sendto(bytes(dns_pack), clientAddress)
-
-    print(str(dns_pack))
     
     print("Sent response.")
     time.sleep(1)
