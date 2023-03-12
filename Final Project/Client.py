@@ -6,7 +6,6 @@ from scapy.layers.dns import DNSQR, DNS
 from scapy.layers.inet import IP, UDP
 from scapy.layers.l2 import Ether
 
-
 '''''''''''''''''''''''''''''''''
     Connect with UDP to DHCP
 '''''''''''''''''''''''''''''''''
@@ -20,8 +19,11 @@ def discover():
     sendp(first)
     print("Discover sent!")
     sniff(filter="udp and port 67", prn=request, count=1)
+    return dns_ip
+
 
 def request(packet):
+    global dns_ip
     client_ip = packet[BOOTP].yiaddr
     dns_ip = packet[DHCP].options[3][1]
     if client_ip == "0.0.0.0":
@@ -37,7 +39,7 @@ def request(packet):
     time.sleep(1)
     sendp(request)
     print("Request sent!")
- #   sniff(filter="udp and port 67", count=1)
+    #sniff(filter="udp and port 67", count=1)
 
 
 '''''''''''''''''''''''''''''''''
@@ -45,7 +47,6 @@ def request(packet):
 '''''''''''''''''''''''''''''''''
 
 def getDashIP(dns_ip, dns_port, app_domain):
-
     clientSocket = socket.socket(AF_INET, SOCK_DGRAM)
     serverName = 'localhost'
     serverPort = 14000
@@ -67,12 +68,12 @@ def getDashIP(dns_ip, dns_port, app_domain):
 
     return app_ip
 
+
 '''''''''''''''''''''''''''''''''
           TCP - DASH
 '''''''''''''''''''''''''''''''''
 
 def streamFromDashTCP(app_ip, app_port):
-
     DASH_ADDRESS = (app_ip, app_port)
     clientSocket = socket.socket(AF_INET, SOCK_STREAM)
     clientSocket.connect(DASH_ADDRESS)
@@ -110,21 +111,57 @@ def streamFromDashTCP(app_ip, app_port):
     clientSocket.close()
 
 
+def streamFromDashRUDP(app_ip, app_port):
+    DASH_ADDRESS = (app_ip, app_port)
+    clientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+
+    clientSocket.sendto("Please stream frames over UDP".encode(), DASH_ADDRESS)
+
+    # Choose picture quality to receive
+    options, DASH_ADDRESS = clientSocket.recvfrom(4096)
+    chosenQuality = input(options.decode())
+    while chosenQuality != "720" and chosenQuality != "480" and chosenQuality != "360":
+        chosenQuality = input('Please enter a valid choice')
+    clientSocket.sendto(chosenQuality.encode(), DASH_ADDRESS)
+
+    # Receive video files
+    time.sleep(1)
+
+    frameCount = 1
+
+    while (frameCount <= 25):
+        data = b''
+        while b"Finished" not in data:
+            data, DASH_ADDRESS = clientSocket.recvfrom(1024)
+            clientSocket.sendto("ACK".encode(), DASH_ADDRESS)
+        data = data[:-8]
+
+        image_copy = open(f'Copies/{frameCount}.png', "wb")
+        image_copy.write(data)
+        image_copy.close()
+        frameCount += 1
+
+    print("Finished receiving video frames.")
+
+    clientSocket.close()
+
+
 def main():
     dhcp_ip = '127.0.0.1'
     dhcp_port = 67
-    dns_ip = '127.0.0.1'
+    #dns_ip = '0.0.0.0'
     dns_port = 53
     app_ip = '0.0.0.0'
     app_port = 30577
     app_domain = "www.dashserver.com"
 
-    discover()
-    if dns_ip != "0.0.0.0":
-        app_ip = getDashIP(dns_ip, dns_port, app_domain)
-    if app_ip != "0.0.0.0":
-        streamFromDashTCP(app_ip, app_port)
-    
+    #dns_ip = discover()
+    #if dns_ip != "0.0.0.0":
+    #    app_ip = getDashIP(dns_ip, dns_port, app_domain)
+    #if app_ip != "0.0.0.0":
+        #streamFromDashTCP(app_ip, app_port)
+        #streamFromDashRUDP(app_ip, app_port)
+    streamFromDashRUDP('127.0.0.1', app_port)
 
 
 if __name__ == '__main__':

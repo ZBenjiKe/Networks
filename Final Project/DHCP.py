@@ -24,10 +24,10 @@ def offer(packet):
                 client_ip = "0.0.0.0" #IP limit reached so i assign 0.0.0.0 as IP
                 break
             client_ip = "10.0.0." + str(ip_end)
-        offer = Ether(dst="ff:ff:ff:ff:ff:ff") /
-                 IP(src=ip_dhcp, dst="255.255.255.255") /
-                 UDP(sport=67, dport=68) /
-                 BOOTP(op=2, yiaddr=client_ip, siaddr=ip_dhcp, giaddr="0.0.0.0", xid=packet[BOOTP].xid) /
+        offer = Ether(dst="ff:ff:ff:ff:ff:ff") / \
+                 IP(src=ip_dhcp, dst="255.255.255.255") / \
+                 UDP(sport=67, dport=68) / \
+                 BOOTP(op=2, yiaddr=client_ip, siaddr=ip_dhcp, giaddr="0.0.0.0", xid=packet[BOOTP].xid) / \
                  DHCP(options=[("message-type", "offer"),
                     ("subnet_mask", "255.255.255.0"),
                     ("router", "10.0.0.10"),
@@ -44,10 +44,10 @@ def ack(packet):
         ip_list.append(packet[BOOTP].yiaddr)
         print("List of IP's: ")
         print(ip_list)
-        dhcp_ack = Ether(dst="ff:ff:ff:ff:ff:ff") /
-                   IP(src=ip_dhcp, dst="255.255.255.255") /
-                   UDP(sport=67, dport=68) /
-                   BOOTP(op=2, yiaddr=packet[BOOTP].yiaddr, siaddr=packet[BOOTP].siaddr, giaddr="0.0.0.0", xid=packet[BOOTP].xid) /
+        dhcp_ack = Ether(dst="ff:ff:ff:ff:ff:ff") / \
+                   IP(src=ip_dhcp, dst="255.255.255.255") / \
+                   UDP(sport=67, dport=68) / \
+                   BOOTP(op=2, yiaddr=packet[BOOTP].yiaddr, siaddr=packet[BOOTP].siaddr, giaddr="0.0.0.0", xid=packet[BOOTP].xid) / \
                    DHCP(options=[("message-type", "ack"),
                                  ("subnet_mask", "255.255.255.0"),
                                  ("router", "10.0.0.18"),
