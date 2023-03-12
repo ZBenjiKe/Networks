@@ -7,6 +7,7 @@ import errno
 
 RUDP_HEADER = 12
 START_CHUNK = 1
+STDN_BUFFER = 1024
 
 
 def sendImagesOverTCP():
@@ -23,7 +24,7 @@ def sendImagesOverTCP():
 
     message = "Hello from DASH!\nThere are 25 video frames available for this video.\nPlease select the video quality you would like:\n720, 480 or 360\n"
     clientSocket.send(bytes(message.encode()))
-    quality = clientSocket.recv(1024).decode()
+    quality = clientSocket.recv(STDN_BUFFER).decode()
 
     img_dir = os.getcwd()+"/Pictures"
     frameCount = 1
@@ -36,7 +37,7 @@ def sendImagesOverTCP():
         clientSocket.sendall(imageStr)
         clientSocket.send("Finished".encode())
         frameCount += 1
-        ack = clientSocket.recv(1024)
+        ack = clientSocket.recv(STDN_BUFFER)
         finish = time.perf_counter()
         new_quality = verifyTCPQuality(start, finish, quality)
         quality = new_quality
@@ -64,48 +65,19 @@ def verifyTCPQuality(start, finish, quality):
     return quality
 
 
-def receive_syn_message():
-    # Receive SYN message from the client
-    syn_message, address = serverSocket.recvfrom(1024)
-    print('Received SYN message from client:', syn_message.decode())
-    return syn_message, address
-
-
-def send_syn_ack_message(syn_message, address):
-    # Send SYN-ACK message to the client
-    global sequence_number
-    syn_ack_message = 'SYN-ACK:{}:{}'.format(syn_message.decode(), sequence_number)
-    serverSocket.sendto(syn_ack_message.encode(), address)
-    print('Sent SYN-ACK message to client:', syn_ack_message)
-
-
-def receive_ack_message(clientAddress):
-    # Receive ACK message from the client
-    global expected_sequence_number
-    ack_message, address = serverSocket.recvfrom(1024)
-    if ack_message.decode().startswith('ACK:') & clientAddress == address:
-        ack_sequence_number = int(ack_message.decode().split(':')[1])
-        if ack_sequence_number == expected_sequence_number:
-            print('Received ACK message from client:', ack_message.decode())
-            expected_sequence_number += 1
-            return True
-    return False
-
-
 def sendImagesOverRUDP():
     SERVER_ADDRESS = ('',30577)
     serverSocket = socket(AF_INET, SOCK_DGRAM)
     serverSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     serverSocket.bind(SERVER_ADDRESS)
     print("The DASH server is ready for connections.")
-    serverSocket.settimeout(30)
 
-    buffer, client_address = serverSocket.recvfrom(1024)
+    buffer, client_address = serverSocket.recvfrom(STDN_BUFFER)
     print("Received request from client:", buffer.decode(), client_address)
 
     message = "Hello from DASH!\nThere are 25 video frames available for this video.\nPlease select the video quality you would like:\n720, 480 or 360\n"
     serverSocket.sendto(message.encode(), client_address)
-    quality, client_address = serverSocket.recvfrom(1024)
+    quality, client_address = serverSocket.recvfrom(STDN_BUFFER)
     quality = quality.decode()
 
     img_dir = os.getcwd() + "/Pictures"
@@ -119,15 +91,25 @@ def sendImagesOverRUDP():
         new_quality = verifyUDPQuality(start, finish, quality)
         quality = new_quality
 
-        try:
-            message, client_address = serverSocket.recvfrom(1024)
-            if "ACK" in message.decode():
-                frameCount += 1
-                continue
-        except socket.timeout:
+
+        timer = 10
+        while timer > 0:
+            serverSocket.setblocking(0)
+            try:
+                message, client_address = serverSocket.recvfrom(STDN_BUFFER)
+                if "ACK" in message.decode():
+                    frameCount += 1
+                    break
+            except error:
+                if error.errno == errno.EWOULDBLOCK:
+                    pass
+            serverSocket.setblocking(1)
+            timer -= 1
+
+        if timer == 0:
             print(f"Timeout occured while waiting for ACK of frame {frameCount}.\nLowering quality and resending frame.")
             quality = "360"
-            continue
+
     print("Finished sending frames to client.")
     time.sleep(3)
     serverSocket.close()
@@ -152,9 +134,11 @@ def sendImage(imageFile, frameCount, client_address, serverSocket):
             serverSocket.sendto(segment, client_address)
             print(f"Sent data message to client: Frame {frameCount}, Seq {sequence_number}")
 
+            time.sleep(0.75)
+
             serverSocket.setblocking(0)
             try:
-                message, client_address = serverSocket.recvfrom(1024)
+                message, client_address = serverSocket.recvfrom(STDN_BUFFER)
                 nack = message.decode()
                 if "NACK" in nack:
                     missing_segment = int(nack[5:])
@@ -172,8 +156,8 @@ def sendImage(imageFile, frameCount, client_address, serverSocket):
                 CHUNK = 63500
             sequence_number += 1
 
-            # Send termination message
-        serverSocket.sendto(b"Finished", client_address)
+    # Send termination message
+    serverSocket.sendto(b"Finished", client_address)
 
 
 def verifyUDPQuality(start, finish, quality):
@@ -195,7 +179,7 @@ def verifyUDPQuality(start, finish, quality):
 
 
 def main():
-    #sendImagesOverTCP()
+    sendImagesOverTCP()
     sendImagesOverRUDP()
 
 if __name__ == '__main__':

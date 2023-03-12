@@ -8,8 +8,8 @@ from scapy.layers.l2 import Ether
 
 
 RUDP_HEADER = 12
-MAX_CHUNK = 4096
-
+MAX_CHUNK = 63500
+STDN_BUFFER = 1024
 
 '''''''''''''''''''''''''''''''''
     Connect with UDP to DHCP
@@ -64,7 +64,7 @@ def getDashIP(dns_ip, dns_port, app_domain):
     print("DNS request sent.")
     time.sleep(2)
 
-    data, address = clientSocket.recvfrom(2048)
+    data, address = clientSocket.recvfrom(STDN_BUFFER)
     print("DNS response received.")
 
     response = DNS(data)
@@ -87,12 +87,9 @@ def streamFromDashTCP(app_ip, app_port):
     clientSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     clientSocket.connect(DASH_ADDRESS)
 
-    '''
-    Make sure process port is 20908
-    '''
 
     # Choose picture quality to receive
-    options = clientSocket.recv(4096).decode()
+    options = clientSocket.recv(STDN_BUFFER).decode()
     chosenQuality = input(options)
     while chosenQuality != "720" and chosenQuality != "480" and chosenQuality != "360":
         chosenQuality = input('Please enter a valid choice')
@@ -106,7 +103,7 @@ def streamFromDashTCP(app_ip, app_port):
     while(frameCount <= 25):
         data = b''
         while b"Finished" not in data:
-            data += clientSocket.recv(1024)
+            data += clientSocket.recv(STDN_BUFFER)
         data = data[:-8]
 
         image_copy = open(f'Copies/{frameCount}.png', "wb")
@@ -129,7 +126,7 @@ def streamFromDashRUDP(app_ip, app_port):
     clientSocket.sendto("Please stream frames over UDP".encode(), DASH_ADDRESS)
 
     # Choose picture quality to receive
-    options, DASH_ADDRESS = clientSocket.recvfrom(1024)
+    options, DASH_ADDRESS = clientSocket.recvfrom(STDN_BUFFER)
     chosenQuality = input(options.decode())
     while chosenQuality != "720" and chosenQuality != "480" and chosenQuality != "360":
         chosenQuality = input('Please enter a valid choice')
@@ -146,19 +143,25 @@ def streamFromDashRUDP(app_ip, app_port):
         data_seq = 0
         data = b''
         while b"Finished" not in data:
-            new_data, DASH_ADDRESS = clientSocket.recvfrom(RUDP_HEADER+MAX_CHUNK)
-            segment_header = new_data[:RUDP_HEADER].decode()
+            buffer = b''
+            while True:
+                new_data, DASH_ADDRESS = clientSocket.recvfrom(RUDP_HEADER+MAX_CHUNK)
+                if not new_data:
+                    break
+                buffer += new_data
+            segment_header = buffer[:RUDP_HEADER].decode()
             sequence_number = int(segment_header.split(':')[2])
+            print(f"Received segment {sequence_number} of frame {frameCount}")
             segments.append(sequence_number)
 
             if data_seq == sequence_number:
-                data += new_data[12:]
+                data += buffer[12:]
                 data_seq += 1
             elif data_seq < sequence_number:
                 data += (('0'*8)*(sequence_number-data_seq)).encode()
-                data += new_data[12:]
+                data += buffer[12:]
             else:
-                data[8*(data_seq-sequence_number):] += new_data[12:]
+                data[8*(data_seq-sequence_number):] += buffer[12:]
 
             if sequence_number % window == 0:
                 for segment in range(last_acked, sequence_number):
@@ -174,6 +177,7 @@ def streamFromDashRUDP(app_ip, app_port):
         image_copy = open(f'Copies/{frameCount}.png', "wb")
         image_copy.write(data)
         image_copy.close()
+        print(f"Frame {frameCount} was completed")
         frameCount += 1
         clientSocket.send("ACK".encode())
 
@@ -185,19 +189,19 @@ def streamFromDashRUDP(app_ip, app_port):
 def main():
     dhcp_ip = '127.0.0.1'
     dhcp_port = 67
-    #dns_ip = '0.0.0.0'
+    dns_ip = '0.0.0.0'
     dns_port = 53
     app_ip = '0.0.0.0'
     app_port = 30577
     app_domain = "www.dashserver.com"
 
-    #dns_ip = discover()
-    #if dns_ip != "0.0.0.0":
-    #    app_ip = getDashIP(dns_ip, dns_port, app_domain)
-    #if app_ip != "0.0.0.0":
-        #streamFromDashTCP(app_ip, app_port)
-        #streamFromDashRUDP(app_ip, app_port)
-    streamFromDashRUDP('127.0.0.1', app_port)
+    dns_ip = discover()
+    if dns_ip != "0.0.0.0":
+        app_ip = getDashIP(dns_ip, dns_port, app_domain)
+    if app_ip != "0.0.0.0":
+        streamFromDashTCP(app_ip, app_port)
+        streamFromDashRUDP(app_ip, app_port)
+    #streamFromDashRUDP('127.0.0.1', app_port)
 
 
 if __name__ == '__main__':
