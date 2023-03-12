@@ -44,7 +44,7 @@ def request(packet):
     Connect with UDP to DNS
 '''''''''''''''''''''''''''''''''
 
-def getDashIP():
+def getDashIP(dns_ip, dns_port, app_domain):
 
     clientSocket = socket.socket(AF_INET, SOCK_DGRAM)
     serverName = 'localhost'
@@ -71,7 +71,7 @@ def getDashIP():
           TCP - DASH
 '''''''''''''''''''''''''''''''''
 
-def streamFromDashTCP():
+def streamFromDashTCP(app_ip, app_port):
 
     DASH_ADDRESS = (app_ip, app_port)
     clientSocket = socket.socket(AF_INET, SOCK_STREAM)
@@ -121,9 +121,9 @@ def main():
 
     discover()
     if dns_ip != "0.0.0.0":
-        app_ip = getDashIP()
+        app_ip = getDashIP(dns_ip, dns_port, app_domain)
     if app_ip != "0.0.0.0":
-        streamFromDashTCP()
+        streamFromDashTCP(app_ip, app_port)
     
 
 
