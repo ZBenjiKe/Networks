@@ -6,6 +6,11 @@ from scapy.layers.dns import DNSQR, DNS
 from scapy.layers.inet import IP, UDP
 from scapy.layers.l2 import Ether
 
+
+RUDP_HEADER = 12
+MAX_CHUNK = 4096
+
+
 '''''''''''''''''''''''''''''''''
     Connect with UDP to DHCP
 '''''''''''''''''''''''''''''''''
@@ -48,6 +53,8 @@ def request(packet):
 
 def getDashIP(dns_ip, dns_port, app_domain):
     clientSocket = socket.socket(AF_INET, SOCK_DGRAM)
+    clientSocket.bind(('localhost', 20908))
+    clientSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     serverName = 'localhost'
     serverPort = 14000
     DNS_ADDRESS = (dns_ip, dns_port)
@@ -76,6 +83,8 @@ def getDashIP(dns_ip, dns_port, app_domain):
 def streamFromDashTCP(app_ip, app_port):
     DASH_ADDRESS = (app_ip, app_port)
     clientSocket = socket.socket(AF_INET, SOCK_STREAM)
+    clientSocket.bind(('localhost', 20908))
+    clientSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
     clientSocket.connect(DASH_ADDRESS)
 
     '''
@@ -114,32 +123,59 @@ def streamFromDashTCP(app_ip, app_port):
 def streamFromDashRUDP(app_ip, app_port):
     DASH_ADDRESS = (app_ip, app_port)
     clientSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    clientSocket.bind(('localhost', 20908))
+    clientSocket.setsockopt(SOL_SOCKET, SO_REUSEADDR, 1)
 
     clientSocket.sendto("Please stream frames over UDP".encode(), DASH_ADDRESS)
 
     # Choose picture quality to receive
-    options, DASH_ADDRESS = clientSocket.recvfrom(4096)
+    options, DASH_ADDRESS = clientSocket.recvfrom(1024)
     chosenQuality = input(options.decode())
     while chosenQuality != "720" and chosenQuality != "480" and chosenQuality != "360":
         chosenQuality = input('Please enter a valid choice')
     clientSocket.sendto(chosenQuality.encode(), DASH_ADDRESS)
 
     # Receive video files
-    time.sleep(1)
 
     frameCount = 1
 
     while (frameCount <= 25):
+        window = 4
+        segments = []
+        last_acked = 0
+        data_seq = 0
         data = b''
         while b"Finished" not in data:
-            data, DASH_ADDRESS = clientSocket.recvfrom(1024)
-            clientSocket.sendto("ACK".encode(), DASH_ADDRESS)
+            new_data, DASH_ADDRESS = clientSocket.recvfrom(RUDP_HEADER+MAX_CHUNK)
+            segment_header = new_data[:RUDP_HEADER].decode()
+            sequence_number = int(segment_header.split(':')[2])
+            segments.append(sequence_number)
+
+            if data_seq == sequence_number:
+                data += new_data[12:]
+                data_seq += 1
+            elif data_seq < sequence_number:
+                data += (('0'*8)*(sequence_number-data_seq)).encode()
+                data += new_data[12:]
+            else:
+                data[8*(data_seq-sequence_number):] += new_data[12:]
+
+            if sequence_number % window == 0:
+                for segment in range(last_acked, sequence_number):
+                    if segment not in segments:
+                        clientSocket.sendto(f'NACK: {segment}'.encode(), DASH_ADDRESS)
+                        break
+                    elif segment == sequence_number:
+                        last_acked = sequence_number
+                        #clientSocket.sendto(f'ACK: {segment}'.encode(), DASH_ADDRESS
+
         data = data[:-8]
 
         image_copy = open(f'Copies/{frameCount}.png', "wb")
         image_copy.write(data)
         image_copy.close()
         frameCount += 1
+        clientSocket.send("ACK".encode())
 
     print("Finished receiving video frames.")
 

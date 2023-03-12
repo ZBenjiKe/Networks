@@ -2,32 +2,12 @@ import requests
 from socket import *
 import os
 import time
+import errno
 
 
-img_urls_files = [
-    '''
-    fill in urls - from files
-    '''
-]
+RUDP_HEADER = 12
+START_CHUNK = 1
 
-img_urls_website = [
-    '''
-    option to download project images from github repo
-    '''
-    'https://images.unsplash.com/photo-1538991383142-36c4edeaffde',
-    'https://images.unsplash.com/photo-1430990480609-2bf7c02a6b1a'
-]
-
-'''
-def downloadImage(img_url):
-    img_bytes = requests.get(img_url).content
-    img_name = img_url.split('/')[3]
-    img_name = f'{img_name}.jpg'
-    with open(img_name, 'wb') as img_file:
-    img_file.write(img_bytes)
-    print(f'{img_name} was downloaded')
-
-'''
 
 def sendImagesOverTCP():
     SERVER_ADDRESS = ('', 30577)
@@ -86,7 +66,7 @@ def verifyTCPQuality(start, finish, quality):
 
 def receive_syn_message():
     # Receive SYN message from the client
-    syn_message, address = serverSocket.recvfrom(BUFFER_SIZE)
+    syn_message, address = serverSocket.recvfrom(1024)
     print('Received SYN message from client:', syn_message.decode())
     return syn_message, address
 
@@ -102,7 +82,7 @@ def send_syn_ack_message(syn_message, address):
 def receive_ack_message(clientAddress):
     # Receive ACK message from the client
     global expected_sequence_number
-    ack_message, address = serverSocket.recvfrom(BUFFER_SIZE)
+    ack_message, address = serverSocket.recvfrom(1024)
     if ack_message.decode().startswith('ACK:') & clientAddress == address:
         ack_sequence_number = int(ack_message.decode().split(':')[1])
         if ack_sequence_number == expected_sequence_number:
@@ -120,15 +100,12 @@ def sendImagesOverRUDP():
     print("The DASH server is ready for connections.")
     serverSocket.settimeout(30)
 
-    # Define a buffer size for receiving data
-    BUFFER_SIZE = 1024
-
-    buffer, client_address = serverSocket.recvfrom(BUFFER_SIZE)
+    buffer, client_address = serverSocket.recvfrom(1024)
     print("Received request from client:", buffer.decode(), client_address)
 
     message = "Hello from DASH!\nThere are 25 video frames available for this video.\nPlease select the video quality you would like:\n720, 480 or 360\n"
     serverSocket.sendto(message.encode(), client_address)
-    quality, client_address = serverSocket.recvfrom(BUFFER_SIZE)
+    quality, client_address = serverSocket.recvfrom(1024)
     quality = quality.decode()
 
     img_dir = os.getcwd() + "/Pictures"
@@ -141,79 +118,66 @@ def sendImagesOverRUDP():
         finish = time.perf_counter()
         new_quality = verifyUDPQuality(start, finish, quality)
         quality = new_quality
-        frameCount += 1
 
+        try:
+            message, client_address = serverSocket.recvfrom(1024)
+            if "ACK" in message.decode():
+                frameCount += 1
+                continue
+        except socket.timeout:
+            print(f"Timeout occured while waiting for ACK of frame {frameCount}.\nLowering quality and resending frame.")
+            quality = "360"
+            continue
     print("Finished sending frames to client.")
     time.sleep(3)
     serverSocket.close()
 
 
-def sendImage(imageFile, frameCount, client_address, serverSocket)
+def sendImage(imageFile, frameCount, client_address, serverSocket):
     with open(imageFile, "rb") as img:
+        
+        # Define the sequence number and expected sequence number
+        sequence_number = 0
+        CHUNK = START_CHUNK
+        
         while True:
-            image_data = img.read(1000)
+            image_data = img.read(CHUNK)
             if not image_data:
                 break
 
-            # Define the sequence number and expected sequence number
-            window = 4
-            sequence_number = 0
-            expected_ack_number = 0
-            unACKed = 0
-
             # Construct the data message
-            segment = f"Data:{frameCount}:{sequence_number}:{len(image_data)}".encode() + image_data
+            segment = f'Data:{frameCount}:{sequence_number}:{len(image_data)}'.encode() + image_data
             
             # Send the data message
             serverSocket.sendto(segment, client_address)
             print(f"Sent data message to client: Frame {frameCount}, Seq {sequence_number}")
 
-            # Wait for acknowledgement
-            ack_received = False
-            while not ack_received:
+            serverSocket.setblocking(0)
             try:
-                serverSocket.settimeout(timeout)
-                ack, _ = serverSocket.recvfrom(BUFFER_SIZE)
-                if ack.decode() == f"Ack:{sequence_number}":
-                ack_received = True
-                expected_sequence_number += 1
-                sequence_number += 1
-
-            except socket.timeout:
-                print(f"Timeout occurred while waiting for ACK of sequence number {sequence_number}")
-                congestion_window = max(1, congestion_window // 2)  # divide congestion window by 2 on timeout
-                sequence_number = expected_sequence_number  # reset sequence number to last successfully transmitted frame
-
-            # Define the congestion window and threshold size
-            congestion_window = 1
-            threshold = 16
-
-            # Define the flow control window size
-            flow_control_window = 1024
-
-            sequence_number = 1
-            expected_sequence_number = 1
-            congestion_window = 1
-            flow_control_window = 1024  # maximum amount of data to send in one go
-            threshold = 16
-            timeout = 5 # in seconds
+                message, client_address = serverSocket.recvfrom(1024)
+                nack = message.decode()
+                if "NACK" in nack:
+                    missing_segment = int(nack[5:])
+                    #img.seek(CHUNK*missing_segment, 0)
+                    sequence_number = missing_segment
+                    CHUNK = max(CHUNK/2, 1)
+            except error:
+                if error.errno == errno.EWOULDBLOCK:
+                    pass
+            serverSocket.setblocking(1)
+            
+            if CHUNK < 32000:
+                CHUNK *= 2
+            else:
+                CHUNK = 63500
+            sequence_number += 1
 
             # Send termination message
         serverSocket.sendto(b"Finished", client_address)
 
 
-        # Perform congestion control
-        if congestion_window < flow_control_window:
-            congestion_window += 1
-        if congestion_window >= threshold:
-            k = (congestion_window - threshold) / congestion_window
-            congestion_window = round(congestion_window * (k * k * k) + congestion_window)
-        else:
-            congestion_window += 1
-
-
 def verifyUDPQuality(start, finish, quality):
-    if (finish - start) > 1 :
+    if (finish - start) > 1:
         if quality == "720":
             quality = "480"
             print("quality changed from 720 to 480")
